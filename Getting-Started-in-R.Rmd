@@ -79,7 +79,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, 
                       eval = TRUE,
-                      cache = TRUE,
+                      cache = FALSE,
                       fig.pos = 'H') #, knitr.table.format = 'latex')
 library(data.table)
 library(ggplot2)
@@ -364,7 +364,7 @@ Use function `ls()` to list the objects in your workspace. The `rm()` function r
 (deletes) them.
 ```{r lsrm}
 ls()
-rm(x, x1, x2, x3, xm, r1, s1, AgE, age)
+rm(x1, x2, x3, r1, s1, AgE, age)
 ls()
 ```
 
@@ -483,10 +483,12 @@ if (!file.exists("ChickWeight.csv"))
            file="ChickWeight.csv")
 ```
 
-First we will import the data from a file called `ChickWeight.csv` using the `fread()`
-function from the `data.table` package. The first thing to do, outside of R, is to open
-the file `ChickWeight.csv` to check what it contains and that it makes sense. Now we can
-import the data as follows:
+First we will import the data from a file called `ChickWeight.csv` using the
+`fread()` function from the `data.table` package which returns a `data.table`
+object (whereas the dataset built into R has a different format).  The first
+thing to do, outside of R, is to open the file `ChickWeight.csv` to check
+what it contains and that it makes sense. Now we can import the data as
+follows:
 
 ```{r cwdt}
 suppressMessages(library(data.table))  # tinyverse
@@ -607,12 +609,12 @@ Before we continue, we have to make an important change to the `cw` dataset by m
 `Diet` and `Time` *factor variables*. This means that R will treat them as categorical
 variables instead of continuous variables. It will simplify our coding. 
 
-```{r cwfactor, echo=2:4}
-options(digits=2)
+```{r cwfactor, echo=2:4, result="asis"}
+options(digits=5,width=45)
 cw[, Diet := factor(Diet)]  
 cw[, Time := factor(Time)]
-summary(cw) # notice the difference ?
-options(digits=6)
+str(cw)     # notice the difference ?
+options(digits=6,width=50)
 ```
 
 Notice that the `:=` operator altered the variable "in-place", and no explicit assignment was
@@ -711,8 +713,6 @@ ggplot(cw, aes(Time, weight, group=Diet,
 
 ```
 
-
-
 # `data.table` Data Wrangling Basics
 
 
@@ -728,7 +728,7 @@ Adds a new variable (column) or modifies an existing one. We already used this a
 create factor variables.
 
 ```{r dtmutate}
-cw[, weightKg := weight/1000 ]    # add a column
+cw[, weightKg := weight/1000]    # add a column
 cw
 cw[, Diet := paste0("Diet_", Diet)] # mod col.
 cw
@@ -747,12 +747,15 @@ cw[, .(Chick, Time, Diet, weightKg)]
 
 It can be used to create aggregations, which is particularly handy with the grouping
 operator. The following example computes means and standard deviations of the 'weight'
-variable grouped by 'Diet'.
+variable grouped by 'Diet'. Note that the output has been truncated.
 
-```{r condmean}
-cw[, .(Mean=mean(weight),SDev=sd(weight)),by=Diet]
+```{r condmean, echo=3}
+dt.print.nrows=getOption("datatable.print.nrows")
+options(datatable.print.nrows=8)
+cw[, .(Mean=mean(weight),SDev=sd(weight)),
+   by=.(Diet, Time)]
+options(datatable.print.nrows=dt.print.nrows)
 ```
-
 
 ## `setnames()` to name or rename
 
@@ -764,14 +767,12 @@ setnames(cw, c("Diet", "weight"),
 cw
 ```
 
-
-
 ## `i` operator
 
 Keeps or drops observations (rows).
 
 ```{r dtfilter}
-cw[ Time == 21 & Weight > 300, ]
+cw[Time == 21 & Weight > 300]
 ```
 
 For comparing values in vectors use: `<` (less than), `>` (greater than), `<=`
@@ -783,14 +784,14 @@ For comparing values in vectors use: `<` (less than), `>` (greater than), `<=`
 Setting a key changes the order of the observations (rows), and also makes indexing faster.
 
 ```{r dtarrange}
-cw[order(Weight), ]       # on the fly
+cw[order(Weight)]       # on the fly
 setkey(cw, Chick, Time)   # setting a key
 cw
 ```
 
 ## Exercise
 
-What does the `order()` do? Try using `order(Time)` in the `i` column. 
+What does the `order()` do? Try using `order(Time)` and  `order(-Time)` in the `i` column. 
 
 # Chaining 
 
@@ -798,18 +799,14 @@ You may want to do multiple data wrangling steps at once. This is where the 'cha
 `data.table` operations (_i.e._, several sets of commands with square brackets) comes to
 the rescue:
 
-```{r resetW, echo=FALSE}
-#cw[, `:=`(weight=Weight, Diet=Group) ]        
-cw <- fread("ChickWeight.csv")
-```
 
 ```{r cwchained}
-cw[Time %in% c(0,21),][           # i: select rows
-  , Weight := weight][            # j: mutate
-  , Group := factor(paste0("Diet_", Diet))][
-  , .(Chick,Group,Time,Weight)][  # j: arrange
+cw21 <- cw[Time %in% c(0,21)][    # i: select rows
+  , weight := Weight][            # j: mutate
+  , Group := factor(Group)][
+  , .(Chick,Group,Time,weight)][  # j: arrange
    order(Chick,Time)][            # i: order
-  1:5,]                           # i: subset
+  1:5]                            # i: subset
 ```
 
 # Chick Weight: Summary Statistics
@@ -821,9 +818,9 @@ and the mean of weight grouped by **diet** and **time**.
 
 ```{r ctstats}
 cw[, .(N    = .N,            # .N is nb per group
-       Mean = mean(weight)), # compute mean
-   by=.(Diet, Time)][        # group by Diet + Time
-   1:5, ]                    # display rows 1 to 5
+       Mean = mean(Weight)), # compute mean
+   by=.(Group, Time)][       # group by Diet + Time
+   1:5]                      # display rows 1 to 5
 ```
 
 ## `by=` argument
@@ -841,12 +838,12 @@ We can calculate the standard deviation, median, minimum and maximum values---on
 options(digits=3)  	# tighter display here
 cws <- cw[Time %in% c(0,21),
           .(N      = .N, 
-            Mean   = mean(weight),
-            SDev   = sd(weight),
-            Median = median(weight),
-            Min    = min(weight),
-            Max    = max(weight)  ),
-          by=.(Diet, Time)]
+            Mean   = mean(Weight),
+            SDev   = sd(Weight),
+            Median = median(Weight),
+            Min    = min(Weight),
+            Max    = max(Weight)  ),
+          by=.(Group, Time)]
 cws
 ```
 
@@ -860,12 +857,11 @@ cws[, Mean_SD := paste0(format(Mean,digits=1),
                         format(SDev,digits=2),
                         ")")]
 cws[, Range := paste(Min, "-", Max)]
-prettySum <- cws[ , .(Diet, Time, N, Mean_SD, 
+prettySum <- cws[ , .(Group, Time, N, Mean_SD, 
                       Median, Range)][
-                 order(Diet, Time)]
+                 order(Group, Time)]
 prettySum
 ```
-
 
 
 ## Final Table
@@ -876,7 +872,7 @@ not displayed here for compactness, full details are of course in the sources.
 
 
 ```{r dtprettyKable, echo = FALSE}
-tbl <- kable(prettySum[Time %in% c(0,21), ], "latex",
+tbl <- kable(prettySum[Time %in% c(0,21)], "latex",
              booktabs = TRUE, linesep = "", align = "crrrrr") 
 tbl <- kable_styling(tbl, position = "center")
 tbl <- row_spec(tbl, 0, bold = TRUE) 
@@ -884,7 +880,7 @@ tbl <- row_spec(tbl, c(2, 4, 6, 8), background = "lightgray")
 tbl
 ```
 
-\phantom{XX}
+
 ## Interpretation
 
 This summary table offers the same interpretation as before, namely that diet 3 has the 
@@ -922,8 +918,6 @@ Special thanks to [Saghir Bashir](https://github.com/saghirb) for publishing the
 Gaslam](https://github.com/brodieG) and [Matt Dowle](https://github.com/mattdowle) for feedback on
 this version, and to [Joshua Ulrich](https://github.com/joshuaulrich/) for many discussions about
 [The Tinyverse](http://tinyverse.org).
-
-
 
 
 [^baseR]: R project: [https://www.r-project.org/](https://www.r-project.org/)
